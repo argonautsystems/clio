@@ -62,6 +62,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional, Type, Union
 
+from clio.extract.confidence import ConfidenceScore  # noqa: F401  (Protocol used for typing)
+
 logger = logging.getLogger(__name__)
 
 
@@ -82,14 +84,14 @@ DEFAULT_MAX_PAGES = 5
 DEFAULT_MAX_TOKENS_PER_PAGE = 2048
 
 
-@dataclass
+@dataclass(frozen=True)
 class VisionConfidence:
     """Structural confidence score for vision extraction.
 
-    Conforms to the clio.extract.confidence.ConfidenceScore Protocol that
-    cleanroom-claude is finalizing in Phase 1.5b. The shape is fixed (value,
-    method, threshold, passed, metadata) so swap-in is mechanical when the
-    Protocol lands.
+    Conforms to the clio.extract.confidence.ConfidenceScore Protocol —
+    runtime-checkable membership verified by isinstance() and the test
+    suite. Frozen for immutability parity with CosineConfidence and
+    EnsembleConfidence.
 
     Method: structural — derives confidence from how many pages returned
     parseable JSON, whether the parsed payload looks non-empty, and whether
@@ -99,7 +101,7 @@ class VisionConfidence:
     value: float
     method: str = "structural"
     threshold: float = 0.5
-    metadata: dict = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def passed(self) -> bool:
@@ -118,7 +120,7 @@ class ExtractionResult:
     data: Any
     pages_processed: int
     model_used: str
-    confidence: VisionConfidence
+    confidence: ConfidenceScore  # any Protocol-conforming score; defaults to VisionConfidence
     raw_responses: list[str] = field(default_factory=list)
     error: Optional[str] = None
 

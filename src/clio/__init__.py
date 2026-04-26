@@ -30,4 +30,4 @@ deliberate: clio stays free of domain assumptions so successor domains can
 adopt it without inheriting portfolio or hospitality conventions.
 """
 
-__version__ = "0.0.1-rc1"
+__version__ = "0.1.0"

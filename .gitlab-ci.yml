@@ -1,18 +1,18 @@
 # clio GitLab CI pipeline
 #
-# Phase 1.5a bootstrap pipeline — validates that the package installs cleanly
-# and imports without exceptions. The pytest collect-only step verifies test
-# files (when added in Phase 1.5b) are discoverable, but no test execution is
-# gated on this phase since there are no tests yet.
+# v0.1.0 pipeline. Stages:
+#   lint     ruff check + format-check on src/ and tests/
+#   test     uv sync --frozen, import smoke, full pytest run
 #
-# Phase 1.5c (v0.1.0 ship) will add: uv.lock with --frozen sync, real test
-# execution, ruff lint gate, and a downstream-adapter compatibility job.
+# uv.lock committed; --frozen syncs from it for deterministic CI.
 
 stages:
+  - lint
   - test
 
 variables:
   UV_VERSION: "0.5.0"
+  UV_FROZEN: "1"
 
 default:
   image: python:3.13-slim
@@ -28,20 +28,34 @@ default:
       - ~/.cache/uv/
 
 # ---------------------------------------------------------------------------
+# Stage: lint
+# ---------------------------------------------------------------------------
+
+ruff:
+  stage: lint
+  script:
+    - uv tool install ruff
+    - uv tool run ruff check src/ tests/
+    - uv tool run ruff format --check src/ tests/
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_TAG'
+
+# ---------------------------------------------------------------------------
 # Stage: test
 # ---------------------------------------------------------------------------
 
 unit-tests:
   stage: test
+  needs: [ruff]
   script:
-    # No uv.lock yet (lockfile lands in v0.1.0 with cleanroom-claude's
-    # Phase 1.5b deps). Use unfrozen sync until then.
-    - uv sync
+    - uv sync --frozen
     - uv run python -c "import clio; print(f'clio v{clio.__version__}')"
-    - uv run python -c "from clio.runtime.hardware import HardwareProfile; print(HardwareProfile())"
-    - uv run python -c "from clio.extract.vision import VisionExtractor, ExtractionResult, VisionConfidence; print('vision module loaded')"
-    # Pytest collection — verifies imports work; no tests to run yet.
-    - uv run python -m pytest tests/ --collect-only -q || true
+    - uv run python -c "from clio.runtime.hardware import HardwareProfile, detect_device; print(HardwareProfile()); print(f'device={detect_device()}')"
+    - uv run python -c "from clio.extract import vision, schema_map, normalize, confidence; print('extract subsystems ok')"
+    - uv run python -c "from clio import track, drift; print('track + drift ok')"
+    - uv run pytest tests/ -v
   artifacts:
     when: on_failure
     paths:

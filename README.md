@@ -14,13 +14,14 @@ The split is deliberate: domain assumptions stay out of `clio` so successor doma
 
 ## Status
 
-**Alpha.** This is the `v0.0.1-rc1-bootstrap` snapshot. Phase 1.5a contributed:
+**Alpha. v0.1.0** — first surface complete. All four subsystems shipped:
 
-- `clio.runtime.hardware` — CPU/GPU/memory probing across darwin + linux + WSL2 (lifted from ic-engine)
-- `clio.extract.vision` — PDF/image → structured JSON via vision LLM (parameterized prompt + schema, litellm-backed for provider-agnostic routing)
-- Package skeleton for `extract/`, `track/`, `drift/`, `runtime/`
+- `clio.extract` — vision (PDF/image → JSON via litellm-backed vision LLM, parameterized prompt + schema), schema_map (sentence-transformer cosine), normalize (8 string transforms + pandas/polars helpers), confidence (Protocol + cosine + ensemble + min-aggregator).
+- `clio.track` — content-addressable Fingerprint (SHA256), Polars-native Hive-partitioned parquet store, lineage trace + descendants, AuditEnvelope for adapter composition.
+- `clio.drift` — eight-event taxonomy, pairwise + against-history compare, auto-remap via schema_map, log/file alarm targets.
+- `clio.runtime` — hardware probing (NVIDIA / AMD / Intel / Apple Metal + macOS/Linux/WSL2 memory), `detect_device()` bridge for torch/sentence-transformers ("cuda" | "mps" | "cpu") with `CLIO_DEVICE` env override.
 
-Phase 1.5b will land schema mapping, normalization, tracking, and drift detection. Phase 1.5c stabilizes the v0.1.0 surface.
+71 tests passing. uv.lock committed for reproducible installs.
 
 ## Subsystems
 
@@ -28,23 +29,25 @@ Phase 1.5b will land schema mapping, normalization, tracking, and drift detectio
 clio/
 ├── extract/          unstructured input → structured output via AI
 │   ├── vision.py         PDF/image → JSON via vision LLM (parameterized)
-│   ├── schema_map.py     CSV column drift remapping (Phase 1.5b)
-│   ├── normalize.py      name + address normalization (Phase 1.5b)
-│   ├── text.py           NER + relation extraction (deferred to v0.2+)
-│   └── confidence.py     common Protocol across subsystems (Phase 1.5b)
-├── track/            persistent provenance + fingerprint store (Phase 1.5b)
-│   ├── fingerprint.py    schema-shape hash + dtype map + value range
-│   ├── store.py          parquet-backed lineage log
-│   ├── lineage.py        query API: where did this row come from?
-│   └── audit.py          per-extraction audit envelope
-├── drift/            semantic drift detection over fingerprints (Phase 1.5b)
-│   ├── detect.py         diff fingerprints, classify drift events
-│   ├── remap.py          auto-re-extract via extract.schema_map
-│   └── alarm.py          surface unfixable drift for human review
+│   ├── schema_map.py     CSV column drift remapping (sentence-transformer cosine, threshold 0.65)
+│   ├── normalize.py      name + address normalization (8 transforms + DataFrame helpers)
+│   ├── confidence.py     ConfidenceScore Protocol + Cosine + Ensemble + min-aggregator
+│   └── text.py           NER + relation extraction (deferred to v0.2+)
+├── track/            content-addressable provenance + lineage
+│   ├── fingerprint.py    SHA256(source_uri ∥ extraction_date ∥ payload_hash)
+│   ├── store.py          Polars-native parquet, Hive year/month partitioning
+│   ├── lineage.py        trace() walks parent chain root-to-leaf; descendants() returns subtree
+│   └── audit.py          minimal AuditEnvelope (fingerprint_id + clio_version)
+├── drift/            semantic drift detection over fingerprints
+│   ├── detect.py         8-event taxonomy: column_added/removed/renamed,
+│   │                     dtype_changed, row_count_anomaly, confidence_dropped,
+│   │                     extractor_version_change. compare() + detect_against_history().
+│   ├── remap.py          auto_remap() resolves column_renamed via schema_map
+│   └── alarm.py          surface() to log/JSONL file; severity_of() aggregates
 └── runtime/          AI-aware execution
-    ├── hardware.py       CPU/GPU/memory detection
-    ├── model_cache.py    sentence-transformers + vision-model cache
-    └── gpu_memory.py     GPU memory budgeter
+    ├── hardware.py       CPU/GPU/memory probing + detect_device() torch bridge
+    ├── model_cache.py    sentence-transformers + vision-model cache (planned)
+    └── gpu_memory.py     GPU memory budgeter (planned)
 ```
 
 ## Install
@@ -62,7 +65,7 @@ Or as a dependency in another project:
 ```toml
 # pyproject.toml
 dependencies = [
-    "clio @ git+https://gitlab.com/perlowja/clio.git@v0.0.1-rc1-bootstrap",
+    "clio @ git+https://gitlab.com/perlowja/clio.git@v0.1.0",
 ]
 ```
 
@@ -94,20 +97,47 @@ Provider routing is litellm-shaped. Pass any vision-capable model string:
 
 Set `CLIO_VISION_API_KEY` (or pass `api_key=` directly), or use the provider's native env var that litellm picks up (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc.).
 
+## Quick start: schema mapping (column drift remap)
+
+```python
+from clio.extract.schema_map import SchemaMapper
+import polars as pl
+
+# Source schema differs from canonical target — drifted column names.
+source = pl.DataFrame({"restaurant_nm": ["..."], "addr_line_1": ["..."]})
+canonical = pl.DataFrame({"name": ["..."], "address": ["..."]})
+
+mapper = SchemaMapper()  # all-MiniLM-L6-v2, cosine threshold 0.65
+mappings = mapper.map_columns(source.columns, canonical.columns)
+# {"restaurant_nm": MappingResult(target="name", confidence=CosineConfidence(value=0.78, passed=True)), ...}
+```
+
+## Quick start: tracking + drift
+
+```python
+from clio.track import Fingerprint, write, scan
+from clio.drift import compare, severity_of
+
+fp1 = Fingerprint.compute(source_uri="...", extraction_date="2026-04-26", payload={"holdings": [...]})
+write(fp1)
+
+# Later: a new extraction from the same source
+fp2 = Fingerprint.compute(source_uri="...", extraction_date="2026-04-27", payload={"holdings": [...]})
+events = compare(fp1, fp2)
+print(severity_of(events))  # "info" | "warn" | "error"
+```
+
 ## Hardware detection
 
 ```python
-from clio.runtime.hardware import HardwareProfile
+from clio.runtime.hardware import HardwareProfile, detect_device
 
 hw = HardwareProfile()
 print(hw)  # human-readable summary
-
-if hw.can_use_gpu(min_free_memory_gb=5.0):
-    # use sentence-transformers / vision LLM with GPU
-    ...
+print(detect_device())  # "cuda" | "mps" | "cpu" — for torch / sentence-transformers
 ```
 
-Detects NVIDIA, AMD ROCm, Intel Arc/iGPU, and Apple Metal with unified-memory awareness.
+Detects NVIDIA, AMD ROCm, Intel Arc/iGPU, and Apple Metal with unified-memory awareness. `CLIO_DEVICE` env var overrides for CI determinism.
 
 ## Methodology
 

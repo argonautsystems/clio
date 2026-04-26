@@ -86,3 +86,28 @@ def test_aggregate_minimum_empty_returns_zero_value():
     agg = aggregate_minimum([])
     assert agg.value == 0.0
     assert agg.metadata.get("reason") == "no_components"
+
+
+def test_vision_confidence_conforms_to_protocol():
+    """Phase 1.5c reconciliation: vision.VisionConfidence is now a formal
+    member of the ConfidenceScore Protocol."""
+    from clio.extract.vision import VisionConfidence
+
+    vc = VisionConfidence(value=0.7)
+    assert isinstance(vc, ConfidenceScore)
+    assert vc.method == "structural"
+    assert vc.passed is True
+
+
+def test_vision_confidence_aggregates_with_cosine():
+    """Mixed-method aggregation: vision + schema_map confidence in one ensemble."""
+    from clio.extract.vision import VisionConfidence
+
+    components = [
+        VisionConfidence(value=0.8, threshold=0.5),
+        CosineConfidence(value=0.7, threshold=0.65),
+    ]
+    agg = aggregate_minimum(components)
+    assert agg.value == 0.7
+    methods = {c["method"] for c in agg.metadata["components"]}
+    assert methods == {"structural", "cosine"}

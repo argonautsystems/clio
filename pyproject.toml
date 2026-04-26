@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "clio"
-version = "0.0.1-rc1"
+version = "0.1.0"
 description = "Foundation library for AI-driven semantic ETL: extraction, tracking, drift detection. Substrate under ic-engine, etlantis, and successor domain libraries."
 license = { text = "Apache-2.0" }
 requires-python = ">=3.10"
