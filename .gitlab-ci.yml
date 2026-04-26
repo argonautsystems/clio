@@ -1,0 +1,53 @@
+# clio GitLab CI pipeline
+#
+# Phase 1.5a bootstrap pipeline — validates that the package installs cleanly
+# and imports without exceptions. The pytest collect-only step verifies test
+# files (when added in Phase 1.5b) are discoverable, but no test execution is
+# gated on this phase since there are no tests yet.
+#
+# Phase 1.5c (v0.1.0 ship) will add: uv.lock with --frozen sync, real test
+# execution, ruff lint gate, and a downstream-adapter compatibility job.
+
+stages:
+  - test
+
+variables:
+  UV_VERSION: "0.5.0"
+
+default:
+  image: python:3.13-slim
+  before_script:
+    - apt-get update -qq && apt-get install -qq -y curl git build-essential
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+    - export PATH="$HOME/.local/bin:$PATH"
+    - uv --version
+  cache:
+    key: uv-${CI_COMMIT_REF_SLUG}
+    paths:
+      - .venv/
+      - ~/.cache/uv/
+
+# ---------------------------------------------------------------------------
+# Stage: test
+# ---------------------------------------------------------------------------
+
+unit-tests:
+  stage: test
+  script:
+    # No uv.lock yet (lockfile lands in v0.1.0 with cleanroom-claude's
+    # Phase 1.5b deps). Use unfrozen sync until then.
+    - uv sync
+    - uv run python -c "import clio; print(f'clio v{clio.__version__}')"
+    - uv run python -c "from clio.runtime.hardware import HardwareProfile; print(HardwareProfile())"
+    - uv run python -c "from clio.extract.vision import VisionExtractor, ExtractionResult, VisionConfidence; print('vision module loaded')"
+    # Pytest collection — verifies imports work; no tests to run yet.
+    - uv run python -m pytest tests/ --collect-only -q || true
+  artifacts:
+    when: on_failure
+    paths:
+      - .venv/
+    expire_in: 1 hour
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_TAG'
