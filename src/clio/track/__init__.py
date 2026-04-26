@@ -5,22 +5,53 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 """clio.track — persistent provenance and lineage.
 
-Designed Phase 1.5b (cleanroom-claude); implemented in 1.5b/c.
+Subsystems (all landed Phase 1.5b):
 
-Planned subsystems:
+    fingerprint   Content-addressable extraction record. SHA256 of
+                  source_uri + extraction_date + payload_hash. Optional
+                  schema metadata (column fingerprint + dtype map +
+                  row count) for tabular sources.
 
-    fingerprint   Schema-shape hash + dtype map + null pct + value range +
-                  source URI + extraction date. Content-hash based for stable
-                  IDs across rebuilds.
+    store         Append-only Polars-native parquet store, year/month
+                  Hive-partitioned. Default path data/clio/track/;
+                  override via CLIO_TRACK_DIR env or per-call.
 
-    store         Parquet-backed lineage log. Append-only, immutable rows.
+    lineage       Walk parent_fingerprint_id chains (trace) and find
+                  downstream descendants (descendants).
 
-    lineage       Query API: "where did this row come from? what confidence?"
-
-    audit         Per-extraction audit envelope. Composes with caller-side
-                  envelopes (e.g. ic_result.clio_fingerprint_id) so the chain
-                  runs end-to-end from agent output back to source URI.
+    audit         Minimal AuditEnvelope for inclusion in adapter result
+                  envelopes (e.g. ic_result.clio_fingerprint_id).
+                  Composition rather than coupling — adapters that don't
+                  use clio carry no clio dependency in their envelope.
 """
+
+from clio.track.audit import AuditEnvelope
+from clio.track.fingerprint import (
+    Fingerprint,
+    column_fingerprint_of,
+    payload_hash_of,
+)
+from clio.track.lineage import descendants, trace
+from clio.track.store import iterate, read, scan, write
+
+__all__ = [
+    "Fingerprint",
+    "AuditEnvelope",
+    "column_fingerprint_of",
+    "payload_hash_of",
+    "write",
+    "read",
+    "scan",
+    "iterate",
+    "trace",
+    "descendants",
+]

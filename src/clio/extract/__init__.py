@@ -5,6 +5,12 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 """clio.extract — unstructured input to structured output via AI.
 
@@ -17,15 +23,36 @@ Subsystems:
                   libraries.
 
     schema_map    CSV column drift remapping via sentence-transformer embeddings
-                  with cosine threshold. (Phase 1.5b lift from cleanroom
-                  LLM_Mapper.py.)
+                  with cosine threshold. Lifted Phase 1.5b from cleanroom
+                  LLM_Mapper.py (model all-MiniLM-L6-v2, threshold 0.65 — both
+                  battle-tested defaults from the RiskyEats DBPR schema-drift
+                  corpus).
 
-    normalize     Name + address normalization with rapidfuzz. (Phase 1.5b lift
-                  from cleanroom T1_normalization_utils.py.)
+    normalize     Name + address normalization for matching. Lifted Phase 1.5b
+                  from cleanroom T1_normalization_utils.py. Eight string
+                  transforms framework-agnostic; two pandas/polars helpers for
+                  column-whitespace stripping.
 
     text          NER + relation extraction. Deferred to v0.2+ — no concrete
-                  consumer yet; placeholder so the directory shape is stable.
+                  consumer yet.
 
-    confidence    Common Protocol across subsystems; each subsystem keeps its
-                  native scoring algorithm.
+    confidence    Common ConfidenceScore Protocol across subsystems; each
+                  subsystem keeps its native scoring algorithm.
+                  CosineConfidence (similarity-based, used by schema_map),
+                  EnsembleConfidence (aggregated, reserved for future use).
+                  vision.VisionConfidence conforms to the same shape.
 """
+
+from clio.extract.confidence import (
+    ConfidenceScore,
+    CosineConfidence,
+    EnsembleConfidence,
+    aggregate_minimum,
+)
+
+__all__ = [
+    "ConfidenceScore",
+    "CosineConfidence",
+    "EnsembleConfidence",
+    "aggregate_minimum",
+]

@@ -778,6 +778,60 @@ class HardwareProfile:
         return "\n".join(lines)
 
 
+def detect_device(hardware: Optional["HardwareProfile"] = None) -> str:
+    """Pick a torch / sentence-transformers device string for AI workloads.
+
+    Returns one of "cuda", "mps", or "cpu". Used by clio.extract.schema_map
+    (sentence-transformer model loading) and other extraction subsystems
+    that need a single device tag rather than the full HardwareProfile.
+
+    Selection rule:
+        * If env var CLIO_DEVICE is set, return its lowercased value
+          (escape hatch for explicit override and CI determinism).
+        * Else, if torch is importable and torch.cuda.is_available(): "cuda".
+        * Else, if torch is importable and torch.backends.mps.is_available(): "mps".
+        * Else, fall back to inspecting HardwareProfile (no torch needed):
+            * Apple Silicon GPU detected → "mps"
+            * Any non-integrated GPU (NVIDIA / AMD / Intel discrete) → "cuda"
+            * Otherwise → "cpu"
+
+    The HardwareProfile fallback covers environments where torch isn't
+    installed yet (e.g. cold-cache CI) but downstream code still wants a
+    sane device string for logging.
+
+    Args:
+        hardware: Optional pre-built HardwareProfile. Avoids re-detecting
+            CPU/GPU/memory on each call. If None, builds one fresh.
+
+    Returns:
+        Lowercase device string: "cuda" | "mps" | "cpu".
+    """
+    import os
+
+    override = os.environ.get("CLIO_DEVICE")
+    if override:
+        return override.strip().lower()
+
+    try:
+        import torch  # type: ignore
+
+        if torch.cuda.is_available():
+            return "cuda"
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            return "mps"
+    except ImportError:
+        pass
+
+    profile = hardware if hardware is not None else HardwareProfile()
+    if profile.gpu.available:
+        for dev in profile.gpu.devices:
+            if dev.vendor == "apple":
+                return "mps"
+            if dev.vendor in {"nvidia", "amd", "intel"} and not dev.integrated:
+                return "cuda"
+    return "cpu"
+
+
 def main():
     """Test hardware detection."""
     print("Detecting hardware...")
