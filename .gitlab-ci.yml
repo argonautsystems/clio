@@ -13,8 +13,8 @@
 
 workflow:
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
     - if: '$CI_COMMIT_TAG'
 
 stages:
@@ -26,17 +26,17 @@ variables:
   UV_FROZEN: "1"
 
 default:
-  image: python:3.13-slim
   before_script:
-    - apt-get update -qq && apt-get install -qq -y curl git build-essential
-    - curl -LsSf https://astral.sh/uv/install.sh | sh
-    - export PATH="$HOME/.local/bin:$PATH"
+    - export PATH="/home/jasonperlow/.local/bin:$PATH"
     - uv --version
   cache:
     key: uv-${CI_COMMIT_REF_SLUG}
     paths:
       - .venv/
       - ~/.cache/uv/
+  tags:
+    - argos
+    - ncz-os
 
 # ---------------------------------------------------------------------------
 # Stage: lint
@@ -44,7 +44,11 @@ default:
 
 ruff:
   stage: lint
+  tags:
+    - argos
+    - ncz-os
   script:
+    - export PATH="/home/jasonperlow/.local/bin:$PATH"
     - uv tool install ruff
     - uv tool run ruff check src/ tests/
     - uv tool run ruff format --check src/ tests/
@@ -55,8 +59,12 @@ ruff:
 
 unit-tests:
   stage: test
+  tags:
+    - argos
+    - ncz-os
   needs: [ruff]
   script:
+    - export PATH="/home/jasonperlow/.local/bin:$PATH"
     - uv sync --frozen
     - uv run python -c "import clio; print(f'clio v{clio.__version__}')"
     - uv run python -c "from clio.runtime.hardware import HardwareProfile, detect_device; print(HardwareProfile()); print(f'device={detect_device()}')"
