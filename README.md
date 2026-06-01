@@ -52,10 +52,10 @@ clio/
 
 ## Install
 
-`clio` is published on the public GitLab mirror at <https://gitlab.com/perlowja/clio>. Install from source for now (PyPI publication will follow v0.1.0).
+`clio` is published on the public GitLab mirror at <https://gitlab.com/argonautsystems/clio>. Install from source for now (PyPI publication will follow v0.1.0).
 
 ```bash
-git clone https://gitlab.com/perlowja/clio.git
+git clone https://gitlab.com/argonautsystems/clio.git
 cd clio
 uv sync
 ```
@@ -65,7 +65,7 @@ Or as a dependency in another project:
 ```toml
 # pyproject.toml
 dependencies = [
-    "clio @ git+https://gitlab.com/perlowja/clio.git@v0.1.0",
+    "clio @ git+https://gitlab.com/argonautsystems/clio.git@v0.1.0",
 ]
 ```
 
@@ -149,6 +149,6 @@ Apache 2.0. See [LICENSE](./LICENSE).
 
 ## Contributing
 
-Source-of-truth bare repo: `root@argonas:/mnt/datapool/git/clio.git` (internal). Public mirror: <https://gitlab.com/perlowja/clio>. Pull requests via GitLab merge requests.
+Source-of-truth bare repo: `root@argonas:/mnt/datapool/git/clio.git` (internal). Public mirror: <https://gitlab.com/argonautsystems/clio>. Pull requests via GitLab merge requests.
 
 Commit author convention: `Jason Perlow <jperlow@gmail.com>`. Pre-commit: run `ruff check --fix && ruff format` before committing.
